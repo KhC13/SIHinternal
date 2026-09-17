@@ -553,9 +553,6 @@ Git
 
 Gemini API key (optional)
 
-Clone Repository
-
-git clone https://github.com/jaideepgoyal551/InnovProcure.git
 cd InnovProcure
 
 Install Dependencies
