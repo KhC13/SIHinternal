@@ -1,0 +1,6 @@
+{
+  "name": "InnovProcure",
+  "description": "Enterprise government innovation procurement platform connecting public-sector challenges with startups from discovery and AI matching through pilots to scale procurement.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

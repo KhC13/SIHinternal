@@ -1,0 +1,581 @@
+// Prisma Schema for InnovProcure Enterprise Government Innovation Procurement Platform
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  GOVERNMENT_ADMIN
+  GOVERNMENT_OFFICER
+  EVALUATOR
+  STARTUP
+  PROCUREMENT_OFFICER
+}
+
+enum ProblemStatus {
+  DRAFT
+  PUBLISHED
+  UNDER_REVIEW
+  SHORTLISTED
+  PILOT
+  PROCUREMENT
+  COMPLETED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  SCREENING
+  SHORTLISTED
+  REJECTED
+  EVALUATION
+  PILOT
+  PROCUREMENT
+  COMPLETED
+}
+
+enum PilotStatus {
+  PLANNED
+  ACTIVE
+  AT_RISK
+  COMPLETED
+  FAILED
+  APPROVED_FOR_SCALE
+}
+
+enum ProcurementStage {
+  RECOMMENDATION
+  BUDGET_APPROVAL
+  TENDER
+  EVALUATION
+  NEGOTIATION
+  CONTRACT
+  PURCHASE_ORDER
+  IMPLEMENTATION
+  COMPLETED
+}
+
+enum ScaleReadinessLevel {
+  NOT_READY
+  CONDITIONALLY_READY
+  READY
+  HIGHLY_READY
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(STARTUP)
+  departmentId String?
+  startupId    String?
+  designation  String?
+  phone        String?
+  avatarUrl    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  startup      Startup?    @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  evaluations  Evaluation[]
+  auditLogs    AuditLog[]
+  notifications Notification[]
+
+  @@index([role])
+  @@index([email])
+}
+
+model Department {
+  id                    String    @id @default(uuid())
+  name                  String
+  code                  String    @unique
+  ministry              String
+  description           String
+  location              String
+  contactEmail          String
+  contactPhone          String
+  activeProblemsCount   Int       @default(0)
+  pilotsCount           Int       @default(0)
+  totalProcurementValue Float     @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  users                 User[]
+  problems              ProblemStatement[]
+  pilots                Pilot[]
+  procurements          Procurement[]
+  contracts             Contract[]
+
+  @@index([code])
+}
+
+model Startup {
+  id                    String    @id @default(uuid())
+  companyName           String    @unique
+  registrationNumber    String    @unique
+  foundedYear           Int
+  stage                 String
+  teamSize              Int
+  fundingTotal          Float     @default(0)
+  location              String
+  website               String
+  contactEmail          String
+  contactPhone          String
+  description           String
+  pitchSummary          String
+  previousGovExperience Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  users                 User[]
+  technologies          StartupTechnology[]
+  sectors               StartupSector[]
+  projects              StartupProject[]
+  certifications        StartupCertification[]
+  applications          Application[]
+  matches               AIMatch[]
+  pilots                Pilot[]
+  procurements          Procurement[]
+  contracts             Contract[]
+
+  @@index([companyName])
+}
+
+model StartupTechnology {
+  id        String   @id @default(uuid())
+  startupId String
+  name      String
+  startup   Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+}
+
+model StartupSector {
+  id        String   @id @default(uuid())
+  startupId String
+  name      String
+  startup   Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+}
+
+model StartupProject {
+  id          String   @id @default(uuid())
+  startupId   String
+  title       String
+  client      String
+  description String
+  year        Int
+  outcomeUrl  String?
+  startup     Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+}
+
+model StartupCertification {
+  id          String   @id @default(uuid())
+  startupId   String
+  name        String
+  issuingBody String
+  year        Int
+  validUntil  String?
+  startup     Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+}
+
+model ProblemStatement {
+  id                 String             @id @default(uuid())
+  problemCode        String             @unique
+  title              String
+  description        String
+  departmentId       String
+  sector             String
+  location           String
+  budget             Float
+  timelineMonths     Int
+  expectedImpact     String
+  targetBeneficiaries String
+  evaluationCriteria Json?
+  status             ProblemStatus      @default(DRAFT)
+  publishedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  department         Department         @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  requirements       ProblemRequirement[]
+  technologies       ProblemTechnology[]
+  applications       Application[]
+  matches            AIMatch[]
+  weights            EvaluationWeights?
+  pilots             Pilot[]
+  procurements       Procurement[]
+
+  @@index([departmentId])
+  @@index([status])
+  @@index([sector])
+}
+
+model ProblemRequirement {
+  id          String           @id @default(uuid())
+  problemId   String
+  title       String
+  description String
+  isMandatory Boolean          @default(true)
+  problem     ProblemStatement @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([problemId])
+}
+
+model ProblemTechnology {
+  id        String           @id @default(uuid())
+  problemId String
+  name      String
+  problem   ProblemStatement @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([problemId])
+}
+
+model Application {
+  id                  String             @id @default(uuid())
+  problemId           String
+  startupId           String
+  proposalTitle       String
+  technicalApproach   String
+  implementationPlan  String
+  timelineMonths      Int
+  proposedBudget      Float
+  expectedImpact      String
+  teamDetails         String
+  status              ApplicationStatus  @default(SUBMITTED)
+  submittedAt         DateTime           @default(now())
+  shortlistedAt       DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  problem             ProblemStatement   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  startup             Startup            @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  documents           ApplicationDocument[]
+  evaluations         Evaluation[]
+  pilot               Pilot?
+
+  @@unique([problemId, startupId])
+  @@index([problemId])
+  @@index([startupId])
+  @@index([status])
+}
+
+model ApplicationDocument {
+  id            String      @id @default(uuid())
+  applicationId String
+  title         String
+  fileType      String
+  fileUrl       String
+  fileSize      Int
+  createdAt     DateTime    @default(now())
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model AIMatch {
+  id                   String           @id @default(uuid())
+  problemId            String
+  startupId            String
+  overallScore         Float
+  technologyScore      Float
+  sectorScore          Float
+  requirementScore     Float
+  experienceScore      Float
+  budgetFitScore       Float
+  locationFitScore     Float
+  impactPotentialScore Float
+  matchExplanation     String
+  strengths            Json
+  potentialRisks       Json
+  recommendedNextStep  String
+  isFallback           Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  problem              ProblemStatement @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  startup              Startup          @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@unique([problemId, startupId])
+  @@index([problemId])
+  @@index([startupId])
+  @@index([overallScore])
+}
+
+model EvaluationWeights {
+  id            String           @id @default(uuid())
+  problemId     String           @unique
+  technical     Int              @default(20)
+  innovation    Int              @default(15)
+  feasibility   Int              @default(15)
+  financial     Int              @default(10)
+  scalability   Int              @default(10)
+  impact        Int              @default(15)
+  security      Int              @default(5)
+  compliance    Int              @default(10)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  problem       ProblemStatement @relation(fields: [problemId], references: [id], onDelete: Cascade)
+}
+
+model Evaluation {
+  id                 String           @id @default(uuid())
+  applicationId      String
+  evaluatorId        String
+  technicalScore     Float
+  innovationScore    Float
+  feasibilityScore   Float
+  financialScore     Float
+  scalabilityScore   Float
+  impactScore        Float
+  securityScore      Float
+  complianceScore    Float
+  totalWeightedScore Float
+  comments           String
+  status             String           @default("SUBMITTED")
+  submittedAt        DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  application        Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  evaluator          User             @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([evaluatorId])
+}
+
+model Pilot {
+  id                   String            @id @default(uuid())
+  applicationId        String            @unique
+  problemId            String
+  startupId            String
+  departmentId         String
+  title                String
+  objectives           String
+  expectedOutcomes     String
+  budget               Float
+  startDate            DateTime
+  endDate              DateTime
+  status               PilotStatus       @default(PLANNED)
+  completionPercentage Int               @default(0)
+  scaleReadinessScore  Float?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  application          Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  problem              ProblemStatement  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  startup              Startup           @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  department           Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  milestones           PilotMilestone[]
+  kpis                 PilotKPI[]
+  risks                PilotRisk[]
+  scaleAssessment      ScaleAssessment?
+  procurements         Procurement[]
+
+  @@index([status])
+  @@index([problemId])
+  @@index([startupId])
+}
+
+model PilotMilestone {
+  id                   String    @id @default(uuid())
+  pilotId              String
+  title                String
+  description          String
+  dueDate              DateTime
+  status               String    @default("PENDING")
+  completionPercentage Int       @default(0)
+  owner                String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  pilot                Pilot     @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  @@index([pilotId])
+}
+
+model PilotKPI {
+  id            String   @id @default(uuid())
+  pilotId       String
+  name          String
+  metricUnit    String
+  baselineValue Float
+  targetValue   Float
+  currentValue  Float
+  status        String   @default("ON_TRACK")
+  trend         String   @default("UP")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  pilot         Pilot    @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  @@index([pilotId])
+}
+
+model PilotRisk {
+  id          String   @id @default(uuid())
+  pilotId     String
+  title       String
+  severity    String   @default("MEDIUM")
+  probability String   @default("LOW")
+  mitigation  String
+  owner       String
+  status      String   @default("IDENTIFIED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pilot       Pilot    @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  @@index([pilotId])
+}
+
+model Procurement {
+  id                   String           @id @default(uuid())
+  pilotId              String?
+  problemId            String
+  startupId            String
+  departmentId         String
+  title                String
+  estimatedValue       Float
+  approvedBudget       Float
+  currentStage         ProcurementStage @default(RECOMMENDATION)
+  procurementOfficerId String?
+  targetCompletionDate DateTime
+  status               String           @default("ACTIVE")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  pilot                Pilot?           @relation(fields: [pilotId], references: [id], onDelete: SetNull)
+  problem              ProblemStatement @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  startup              Startup          @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  department           Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  events               ProcurementEvent[]
+  contracts            Contract[]
+
+  @@index([currentStage])
+  @@index([departmentId])
+  @@index([startupId])
+}
+
+model ProcurementEvent {
+  id            String           @id @default(uuid())
+  procurementId String
+  fromStage     ProcurementStage
+  toStage       ProcurementStage
+  notes         String
+  actorId       String
+  createdAt     DateTime         @default(now())
+
+  procurement   Procurement      @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+
+  @@index([procurementId])
+}
+
+model Contract {
+  id            String      @id @default(uuid())
+  procurementId String
+  contractNumber String     @unique
+  startupId     String
+  departmentId  String
+  startDate     DateTime
+  endDate       DateTime
+  contractValue Float
+  terms         String
+  status        String      @default("DRAFT")
+  documentUrl   String?
+  signedAt      DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  startup       Startup     @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  department    Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([contractNumber])
+  @@index([startupId])
+  @@index([departmentId])
+}
+
+model ScaleAssessment {
+  id                            String              @id @default(uuid())
+  pilotId                       String              @unique
+  impactScore                   Float
+  technicalReadinessScore       Float
+  operationalReadinessScore     Float
+  financialSustainabilityScore  Float
+  userAdoptionScore             Float
+  securityScore                 Float
+  complianceScore               Float
+  scalabilityScore              Float
+  overallScore                  Float
+  readinessLevel                ScaleReadinessLevel
+  summary                       String
+  recommendations               Json
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
+
+  pilot                         Pilot               @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  @@index([overallScore])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?
+  role      UserRole?
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([role])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  userEmail String?
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model File {
+  id           String   @id @default(uuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  uploaderId   String?
+  createdAt    DateTime @default(now())
+
+  @@index([uploaderId])
+}
